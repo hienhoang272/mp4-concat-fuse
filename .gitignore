@@ -1,0 +1,8 @@
+/target/
+/mnt/
+/clips/
+/merged.mp4
+/spec.json
+*.log
+*.tmp
+.DS_Store
