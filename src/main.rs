@@ -278,8 +278,38 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Device id of our FUSE mount, recorded right after mounting.
+static MOUNT_DEV: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+
 fn mount(mountpoint: &Path, vfs: Vec<fs::VirtualFile>, allow_other: bool, threads: usize) -> Result<()> {
     use fuser::{Config, MountOption, Session, SessionACL};
+
+    // Block SIGINT/SIGTERM/SIGHUP in all threads; a dedicated thread waits for
+    // them and unmounts cleanly, which makes the session loop below return.
+    unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut set);
+        libc::sigaddset(&mut set, libc::SIGINT);
+        libc::sigaddset(&mut set, libc::SIGTERM);
+        libc::sigaddset(&mut set, libc::SIGHUP);
+        libc::pthread_sigmask(libc::SIG_BLOCK, &set, std::ptr::null_mut());
+        let mp = mountpoint.to_path_buf();
+        std::thread::spawn(move || {
+            let mut sig = 0;
+            libc::sigwait(&set, &mut sig);
+            // Only unmount if the path is still OUR mount: after a lazy unmount
+            // another instance may have mounted at the same path.
+            let ours = MOUNT_DEV.get().is_some_and(|&dev| {
+                use std::os::unix::fs::MetadataExt;
+                std::fs::metadata(&mp).map(|m| m.dev() == dev).unwrap_or(false)
+            });
+            if ours {
+                eprintln!("Unmounting {}...", mp.display());
+                let _ = std::process::Command::new("fusermount3").arg("-u").arg("-z").arg(&mp).status();
+            }
+            std::process::exit(0);
+        });
+    }
 
     let mut cfg = Config::default();
     cfg.mount_options = vec![
@@ -295,9 +325,21 @@ fn mount(mountpoint: &Path, vfs: Vec<fs::VirtualFile>, allow_other: bool, thread
 
     let names: Vec<String> = vfs.iter().map(|v| v.name.clone()).collect();
     let session = Session::new(fs::ConcatFs::new(vfs), mountpoint, &cfg).context("FUSE mount failed")?;
+    {
+        // stat() of the mount root is answered by the session loop, so do it
+        // from another thread once session.run() below is serving requests.
+        use std::os::unix::fs::MetadataExt;
+        let mp = mountpoint.to_path_buf();
+        std::thread::spawn(move || {
+            if let Ok(m) = std::fs::metadata(&mp) {
+                let _ = MOUNT_DEV.set(m.dev());
+            }
+        });
+    }
     for n in &names {
         eprintln!("Mounted: {}", mountpoint.join(n).display());
     }
+    eprintln!("(Ctrl-C to unmount)");
     println!("READY {}", mountpoint.display());
     let _ = std::io::stdout().flush();
     session.run().context("FUSE session")?;
