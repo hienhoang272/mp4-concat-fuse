@@ -33,7 +33,7 @@ enum Cmd {
         #[arg(long)]
         allow_other: bool,
         /// FUSE worker threads.
-        #[arg(long, default_value_t = 4)]
+        #[arg(long, default_value_t = default_threads())]
         threads: usize,
     },
     /// Mount several virtual files at once, described by a JSON spec:
@@ -45,7 +45,7 @@ enum Cmd {
         spec: PathBuf,
         #[arg(long)]
         allow_other: bool,
-        #[arg(long, default_value_t = 4)]
+        #[arg(long, default_value_t = default_threads())]
         threads: usize,
     },
     /// Write the virtual file to disk / stdout ("-"), mainly for verification.
@@ -191,6 +191,11 @@ fn hms(s: f64) -> String {
     format!("{:02}:{:02}:{:02}.{:03}", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
 }
 
+/// Default to one worker outside Linux, as required by fuser.
+fn default_threads() -> usize {
+    if cfg!(target_os = "linux") { 4 } else { 1 }
+}
+
 /// Each source clip stays open while mounted (one fd per clip), so long
 /// dashcam days (hundreds of 1-minute clips per camera) exceed the default
 /// soft limit of 1024. Raise the soft limit to the hard limit.
@@ -305,6 +310,9 @@ fn mount(mountpoint: &Path, vfs: Vec<fs::VirtualFile>, allow_other: bool, thread
             });
             if ours {
                 eprintln!("Unmounting {}...", mp.display());
+                #[cfg(target_os = "macos")]
+                let _ = std::process::Command::new("/sbin/umount").arg(&mp).status();
+                #[cfg(not(target_os = "macos"))]
                 let _ = std::process::Command::new("fusermount3").arg("-u").arg("-z").arg(&mp).status();
             }
             std::process::exit(0);
