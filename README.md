@@ -21,6 +21,74 @@ Your dashcam splits a drive into dozens of files. Your action camera starts a ne
 
 Use this for compatible recordings from the same camera mode. Keep the source drive connected while the mount is active.
 
+## Use your own clips
+
+The examples below assume `cargo install --path . --locked`. Otherwise, replace `mp4-concat-fuse` with `./target/release/mp4-concat-fuse`.
+
+### Pick folders, files, or both
+
+```bash
+mp4-concat-fuse info /media/card/DCIM
+mp4-concat-fuse mount /tmp/trip clip1.mp4 clip2.mp4 --name trip.mp4
+mp4-concat-fuse mount /tmp/trip /media/card/DCIM --ext mov
+mp4-concat-fuse mount /tmp/trip /media/card/DCIM --rotate 180
+```
+
+Create an empty mount directory before running a direct `mount` command. Folder scans are not recursive. They select `.mp4` by default, ignore extension case, and sort naturally, so `clip2` comes before `clip10`. Explicit files keep the order you supply. Multiple input folders are scanned in the order you supply them.
+
+### Group several virtual videos
+
+Create a JSON file with an ordered list of **file paths** for each virtual video:
+
+```json
+{
+  "files": [
+    {
+      "name": "front.mp4",
+      "inputs": ["/media/card/front/001.MP4", "/media/card/front/002.MP4"]
+    },
+    {
+      "name": "rear.mp4",
+      "inputs": ["/media/card/rear/001.MP4", "/media/card/rear/002.MP4"],
+      "rotate": 180
+    }
+  ],
+  "tracks": ["vide", "soun"]
+}
+```
+
+```bash
+mkdir -p /tmp/trip
+mp4-concat-fuse mount-spec /tmp/trip spec.json
+```
+
+Unlike `mount`, `mount-spec` does not expand folders or sort the inputs. Relative paths resolve from the process's working directory, not from the JSON file's directory. Each output name must be unique and contain no `/`.
+
+The command prints `READY <mountpoint>` when the session is created. It stays in the foreground while the mount serves reads.
+
+### Export a standalone file
+
+```bash
+mp4-concat-fuse export trip.mp4 /media/card/DCIM
+mp4-concat-fuse export - /media/card/DCIM | sha256sum
+```
+
+Export uses the same virtual layout as the mount, but writes every byte to a file or standard output. Choose an output path outside the input clips. The command overwrites an existing output file.
+
+### Choose playback options
+
+| Option | Applies to | Behavior |
+| --- | --- | --- |
+| `--name trip.mp4` | `mount` | Set the virtual filename. Default: `merged.mp4`. |
+| `--ext mov` | `mount`, `info`, `export` | Select the extension when scanning folders. Default: `mp4`. |
+| `--rotate 90` | `mount`, `info`, `export` | Set display rotation metadata. Multiples of 90 degrees only. |
+| `--tracks vide` | `mount`, `info`, `export` | Keep video only. Default: `vide,soun` for video and audio. |
+| `--no-align` | `mount`, `info`, `export` | Append track timing without the default join alignment. |
+| `--threads 4` | `mount`, `mount-spec` | Set worker count. Default: 4 on Linux, 1 on macOS. Use 1 on macOS. |
+| `--allow-other` | `mount`, `mount-spec` | Allow other users to read. On Linux, requires `user_allow_other` in `/etc/fuse.conf`. |
+
+For JSON specs, `rotate` is per file and `tracks` applies to the whole mount. Spec mounts always use the default timing alignment.
+
 ## How the virtual file works
 
 An MP4 has an index, called `moov`, that describes sample timing and byte positions. Its `mdat` area holds the encoded video and audio.
@@ -51,6 +119,25 @@ The default timing alignment follows the longest track in each clip, including t
 - Later clips with edit-list offsets retain their pre-roll instead of trimming it. The CLI prints a warning for that case.
 - Each source occurrence keeps a file handle open. The CLI raises its soft limit to the hard limit, but very large specs may still need a higher system limit.
 - This is a small project with a custom MP4 parser. Verify your recordings and player before relying on a long unattended session.
+
+## Make shortcuts
+
+Run `make` to see commands grouped by purpose. `make lint` and `make fmt` need Clippy and rustfmt. With rustup, install them with `rustup component add clippy rustfmt`.
+
+| Group | Commands |
+| --- | --- |
+| Build and develop | `make build`, `make check`, `make test`, `make lint`, `make fmt`, `make install`, `make clean` |
+| Inspect and use | `make info`, `make mount`, `make mount-spec`, `make unmount`, `make export` |
+
+```bash
+make mount INPUTS=/media/card/DCIM MOUNTPOINT=/tmp/trip NAME=trip.mp4
+make info INPUTS="clip1.mp4 clip2.mp4"
+make mount-spec SPEC=spec.json MOUNTPOINT=/tmp/trip
+make export INPUTS=/media/card/DCIM OUTPUT=/tmp/trip.mp4
+make mount INPUTS=/media/card/DCIM ARGS="--rotate 180 --tracks vide"
+```
+
+Defaults are `INPUTS=clips`, `MOUNTPOINT=mnt`, `NAME=merged.mp4`, `SPEC=spec.json`, and `OUTPUT=merged.mp4`. `INPUTS` is a shell-separated list. For individual paths containing spaces, use the CLI directly and quote each path. `ARGS` adds CLI flags.
 
 ## Find your way around the source
 
