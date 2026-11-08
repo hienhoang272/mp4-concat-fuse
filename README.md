@@ -147,3 +147,47 @@ Defaults are `INPUTS=clips`, `MOUNTPOINT=mnt`, `NAME=merged.mp4`, `SPEC=spec.jso
 | [`src/mp4.rs`](src/mp4.rs) | MP4 box reader, sample tables, and box writer |
 | [`src/concat.rs`](src/concat.rs) | Combined timing, sample descriptions, offsets, and virtual byte layout |
 | [`src/fs.rs`](src/fs.rs) | Byte-range reads and the read-only FUSE filesystem |
+
+## Install on your OS
+
+### Linux
+
+1. On Ubuntu or Debian, install the build tools and FUSE utility:
+
+   ```bash
+   sudo apt update
+   sudo apt install build-essential pkg-config fuse3 curl git
+   ```
+
+2. Install the current stable Rust toolchain through [rustup](https://rustup.rs/) if Cargo is not installed:
+
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   . "$HOME/.cargo/env"
+   ```
+
+3. Open the repository directory and build:
+
+   ```bash
+   cargo build --release --locked
+   ./target/release/mp4-concat-fuse --help
+   ```
+
+   To put the command on your PATH, run `cargo install --path . --locked`. The Makefile runs the local release binary, so installation is optional.
+
+4. Confirm that FUSE is available, then mount your clips:
+
+   ```bash
+   ls -l /dev/fuse
+   mkdir -p "$HOME/Videos/trip"
+   ./target/release/mp4-concat-fuse mount "$HOME/Videos/trip" /media/card/DCIM
+   ```
+
+   Wait for `READY`, then open `~/Videos/trip/merged.mp4`. Keep the process running while you play the video. To unmount from another terminal:
+
+   ```bash
+   fusermount3 -u "$HOME/Videos/trip"
+   ```
+
+If `/dev/fuse` is missing, try `sudo modprobe fuse` and check again. A container also needs access to the host FUSE device and permission to mount filesystems.
+
