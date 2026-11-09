@@ -191,3 +191,68 @@ Defaults are `INPUTS=clips`, `MOUNTPOINT=mnt`, `NAME=merged.mp4`, `SPEC=spec.jso
 
 If `/dev/fuse` is missing, try `sudo modprobe fuse` and check again. A container also needs access to the host FUSE device and permission to mount filesystems.
 
+### macOS
+
+This is an experimental setup guide. The MP4 reader uses Unix APIs available on macOS, and `fuser` provides a macFUSE backend. The CLI uses one worker thread by default on macOS and `/sbin/umount` for signal-triggered cleanup.
+
+1. Install Apple's command line tools:
+
+   ```bash
+   xcode-select --install
+   ```
+
+   If the tools are already installed, continue. With [Homebrew](https://brew.sh/) installed, add Rust and pkg-config:
+
+   ```bash
+   brew install rust pkgconf git
+   ```
+
+2. Download and install [macFUSE](https://macfuse.github.io/). Complete the approval and restart steps required by its installer. Follow the [official setup guide](https://github.com/macfuse/macfuse/wiki/Getting-Started) for your Mac and macOS version.
+
+   This project's pinned `fuser` version links the `fuse` pkg-config library through its macFUSE compatibility backend. This guide targets that traditional backend. Compatibility with the newer FSKit backend and with FUSE-T has not been established for this project.
+
+3. Confirm that the build can find macFUSE:
+
+   ```bash
+   pkg-config --modversion fuse
+   ```
+
+   If `fuse.pc` is installed but pkg-config cannot find it, add the usual package locations:
+
+   ```bash
+   export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+   pkg-config --modversion fuse
+   ```
+
+   If that still fails, check the macFUSE installation before building. Do not use `macos-no-mount` for a runnable mount binary.
+
+4. From the repository directory, build and inspect your clips:
+
+   ```bash
+   cargo build --release --locked
+   ./target/release/mp4-concat-fuse info "/Volumes/CAMERA/DCIM"
+   ```
+
+5. Create a mount directory and start the filesystem:
+
+   ```bash
+   mkdir -p "$HOME/Movies/trip"
+   ./target/release/mp4-concat-fuse mount "$HOME/Movies/trip" "/Volumes/CAMERA/DCIM" --threads 1
+   ```
+
+   After `READY`, open the file in VLC from a second terminal:
+
+   ```bash
+   open -a VLC "$HOME/Movies/trip/merged.mp4"
+   ```
+
+6. Close the player, then press `Ctrl+C` in the mount terminal. Alternatively:
+
+   ```bash
+   /sbin/umount "$HOME/Movies/trip"
+   ```
+
+   If the volume is busy, close players and Finder windows that use it, and move terminal working directories outside the mount before retrying.
+
+`make build`, `make mount`, and `make unmount` also work with this setup. Keep `--threads 1` if you set the thread count explicitly. `fuser` 0.18 only supports multiple worker threads on Linux. The [pinned dependency's build script](https://docs.rs/crate/fuser/0.18.0/source/build.rs) documents how it locates macFUSE.
+
