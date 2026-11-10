@@ -19,6 +19,10 @@
   <a href="#make-shortcuts">Make shortcuts</a>
 </p>
 
+<video src="media/intro.mp4" controls width="360"></video>
+
+[Video](media/intro.mp4)
+
 Your dashcam splits a drive into dozens of files. Your action camera starts a new file halfway through a recording. You want to watch the whole thing, but a conventional merge creates another large video on disk.
 
 `mp4-concat-fuse` gives you a different option. Mount your clips, open `merged.mp4` in a player such as VLC or mpv, and play or seek across them. The file looks like a merged MP4, while its media data still comes from the original clips.
