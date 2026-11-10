@@ -19,9 +19,7 @@
   <a href="#make-shortcuts">Make shortcuts</a>
 </p>
 
-<video src="media/intro.mp4" controls width="360"></video>
-
-[Video](media/intro.mp4)
+https://github.com/user-attachments/assets/54909212-35f1-4b73-8d98-94815a5b8706
 
 Your dashcam splits a drive into dozens of files. Your action camera starts a new file halfway through a recording. You want to watch the whole thing, but a conventional merge creates another large video on disk.
 
